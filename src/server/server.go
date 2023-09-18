@@ -1,21 +1,21 @@
-package main
+package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
-	"os"
-	"os/signal"
 	"strconv"
 	"sync"
-	"syscall"
 	"time"
 
-	"github.com/bryanvaz/grpc-gl/protos/go/banking" // Modify this import path to your generated pb.go file
+	"github.com/bryanvaz/grpc-gl/protos/go/banking"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
+
+var ServerIsRunningError = errors.New("Server is running.")
 
 var accounts = make(map[string]int32)
 var transactions = make(map[string]*banking.Transaction)
@@ -23,11 +23,49 @@ var mtx sync.Mutex
 
 var DEBUG = true
 
-type server struct {
+type Server struct {
 	banking.UnimplementedBankingServiceServer
+	Port       int
+	running    bool
+	grpcServer *grpc.Server
 }
 
-func (s *server) MakeTransaction(ctx context.Context, req *banking.TransactionRequest) (*banking.TransactionResponse, error) {
+func NewServer() *Server {
+	return &Server{
+		Port: 50051,
+	}
+}
+
+func (s *Server) IsRunning() bool {
+	return s.running
+}
+
+func (s *Server) Start() error {
+	listener, err := net.Listen("tcp", ":"+strconv.Itoa(s.Port))
+	if err != nil {
+		log.Fatalf("Failed to listen: %v", err)
+		return err
+	}
+	grpcServer := grpc.NewServer()
+	banking.RegisterBankingServiceServer(grpcServer, s)
+	reflection.Register(grpcServer)
+	s.grpcServer = grpcServer
+	s.running = true
+	// Start serving incoming connections
+	err = grpcServer.Serve(listener)
+	s.running = false
+	return err
+}
+
+func (s *Server) GracefulStop() {
+	if s.running {
+		// Gracefully stop the server
+		s.grpcServer.GracefulStop()
+		s.running = false
+	}
+}
+
+func (s *Server) MakeTransaction(ctx context.Context, req *banking.TransactionRequest) (*banking.TransactionResponse, error) {
 	mtx.Lock()
 	defer mtx.Unlock()
 
@@ -74,7 +112,7 @@ func (s *server) MakeTransaction(ctx context.Context, req *banking.TransactionRe
 	return &banking.TransactionResponse{TransactionId: transactionID, Success: true, Message: "Transaction Successful"}, nil
 }
 
-func (s *server) GetBalance(ctx context.Context, req *banking.BalanceRequest) (*banking.BalanceResponse, error) {
+func (s *Server) GetBalance(ctx context.Context, req *banking.BalanceRequest) (*banking.BalanceResponse, error) {
 	mtx.Lock()
 	defer mtx.Unlock()
 
@@ -90,11 +128,11 @@ func (s *server) GetBalance(ctx context.Context, req *banking.BalanceRequest) (*
 	return &banking.BalanceResponse{Balance: balance}, nil
 }
 
-func (s *server) CreateAccount(ctx context.Context, req *banking.AccountRequest) (*banking.AccountResponse, error) {
+func (s *Server) CreateAccount(ctx context.Context, req *banking.AccountRequest) (*banking.AccountResponse, error) {
 	mtx.Lock()
 	defer mtx.Unlock()
 
-	accountID := fmt.Sprintf("%d", time.Now().UnixNano())
+	accountID := fmt.Sprintf("%d", time.Now().UnixMilli())
 	accounts[accountID] = req.InitialBalance
 
 	if DEBUG {
@@ -104,7 +142,7 @@ func (s *server) CreateAccount(ctx context.Context, req *banking.AccountRequest)
 	return &banking.AccountResponse{AccountId: accountID}, nil
 }
 
-func (s *server) GetTransactionDetails(ctx context.Context, req *banking.TransactionDetailsRequest) (*banking.TransactionDetailsResponse, error) {
+func (s *Server) GetTransactionDetails(ctx context.Context, req *banking.TransactionDetailsRequest) (*banking.TransactionDetailsResponse, error) {
 	mtx.Lock()
 	defer mtx.Unlock()
 
@@ -120,39 +158,19 @@ func (s *server) GetTransactionDetails(ctx context.Context, req *banking.Transac
 	return &banking.TransactionDetailsResponse{Transaction: transaction}, nil
 }
 
-func main() {
-	port := 50051
-	listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
-	if err != nil {
-		log.Fatalf("Failed to listen: %v", err)
+func (s *Server) ListAccount(ctx context.Context, req *banking.ListAccountRequest) (*banking.ListAccountResponse, error) {
+	mtx.Lock()
+	defer mtx.Unlock()
+
+	var accountList []*banking.Account
+
+	for id, balance := range accounts {
+		accountList = append(accountList, &banking.Account{Id: id, Balance: balance})
 	}
 
-	grpcServer := grpc.NewServer()
-	banking.RegisterBankingServiceServer(grpcServer, &server{})
+	if DEBUG {
+		log.Println("ListAccount: Accounts:", accountList)
+	}
 
-	reflection.Register(grpcServer)
-
-	// Start serving incoming connections
-	go func() {
-		if err := grpcServer.Serve(listener); err != nil {
-			log.Fatalf("Failed to serve: %v", err)
-		}
-	}()
-
-	// Print a console message indicating that the server is running
-	log.Printf("Server started, listening on port %d", port)
-	log.Println("Press Ctrl+C to quit")
-
-	// Block until a signal is received
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
-	<-signalChan
-
-	// Gracefully stop the server
-	log.Println("Shutting down server...")
-	grpcServer.GracefulStop()
-
-	// if err := grpcServer.Serve(listener); err != nil {
-	// 	log.Fatalf("Failed to serve: %v", err)
-	// }
+	return &banking.ListAccountResponse{Accounts: accountList}, nil
 }

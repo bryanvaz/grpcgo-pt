@@ -8,6 +8,7 @@ service BankingService {
   rpc MakeTransaction(TransactionRequest) returns (TransactionResponse);
   rpc GetBalance(BalanceRequest) returns (BalanceResponse);
   rpc CreateAccount(AccountRequest) returns (AccountResponse);
+  rpc ListAccount(ListAccountRequest) returns (ListAccountResponse);
   rpc GetTransactionDetails(TransactionDetailsRequest) returns (TransactionDetailsResponse);
 }
 
@@ -49,6 +50,12 @@ message AccountRequest {
 
 message AccountResponse {
   string accountId = 1;
+}
+
+message ListAccountRequest {}
+
+message ListAccountResponse {
+  repeated Account accounts = 1;
 }
 
 message TransactionDetailsRequest {
