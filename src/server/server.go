@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bryanvaz/grpc-gl/protos/go/banking"
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -38,6 +39,14 @@ func NewServer() *Server {
 
 func (s *Server) IsRunning() bool {
 	return s.running
+}
+
+func (s *Server) TestMode(truncate bool) {
+	DEBUG = false
+	if truncate {
+		accounts = make(map[string]int32)
+		transactions = make(map[string]*banking.Transaction)
+	}
 }
 
 func (s *Server) Start() error {
@@ -139,11 +148,11 @@ func (s *Server) CreateAccount(ctx context.Context, req *banking.AccountRequest)
 	mtx.Lock()
 	defer mtx.Unlock()
 
-	accountID := fmt.Sprintf("%d", time.Now().UnixMilli())
+	accountID := uuid.New().String()
 	accounts[accountID] = req.InitialBalance
 
 	if DEBUG {
-		log.Println("GetBalance: ID:", accountID, "Balance:", req.InitialBalance)
+		log.Println("CreateAccount: ID:", accountID, "Balance:", req.InitialBalance)
 	}
 
 	return &banking.AccountResponse{AccountId: accountID}, nil
