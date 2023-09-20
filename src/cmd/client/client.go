@@ -63,30 +63,53 @@ func plow(c pb.BankingServiceClient) {
 		Message: "ping",
 	}
 	latencies := make([]int64, numIter)
-	last_update := time.Now().UnixMicro()
-	if numConns > 1 {
+
+	jobs := make(chan int, numIter)
+	results := make(chan int64, numIter)
+
+	// Start the workers
+	for i := 0; i < numConns; i++ {
+		go func() {
+			for j := range jobs {
+				_ = j
+				start := time.Now().UnixMicro()
+				_, err := c.Ping(context.Background(), pr)
+				if err != nil {
+					log.Fatalf("Failed to ping: %v", err)
+				}
+				end := time.Now().UnixMicro()
+				results <- end - start
+			}
+		}()
 	}
 
+	// Send the jobs
 	for i := 0; i < numIter; i++ {
-		start := time.Now().UnixMicro()
-		_, err := c.Ping(context.Background(), pr)
-		if err != nil {
-			log.Fatalf("Failed to ping: %v", err)
-		}
-		end := time.Now().UnixMicro()
-		latencies[i] = end - start
-		if end-last_update > 500_000 || i == numIter-1 {
+		jobs <- i
+	}
+	close(jobs)
+
+	// Collect the results
+	start_time := time.Now().UnixMicro()
+	last_update := time.Now().UnixMicro()
+	for i := 0; i < numIter; i++ {
+		latencies[i] = <-results
+		if last_update < time.Now().UnixMicro()-500_000 || i == numIter-1 {
 			avg_latency := int64(0)
 			for li := 0; li <= i; li++ {
 				avg_latency += latencies[li]
 			}
 			avg_latency /= int64(i + 1)
-			log.Printf("Iteration %d/%d - Latency: %d μsec (avg)", i+1, numIter, avg_latency)
-			last_update = end
+			last_update = time.Now().UnixMicro()
+			elapsed := last_update - start_time
+			pct_complete := float64(i+1) / float64(numIter) * 100.0
+			req_per_sec := float64(i+1) / float64(elapsed) * 1_000_000.0
+			log.Printf(
+				"Iteration %d/%d (%.2f%%)- %.1f sec elapsed - Latency: %d μsec (avg) - RPS: %.1f",
+				i+1, numIter, pct_complete, float64(elapsed)/1_000_000.0, avg_latency, req_per_sec,
+			)
 		}
 	}
-	// log.Printf("Response from server: %v", pongResp)
-
 }
 
 func createAccount(c pb.BankingServiceClient) {
