@@ -19,6 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
+	BankingService_Ping_FullMethodName                  = "/banking.BankingService/Ping"
 	BankingService_MakeTransaction_FullMethodName       = "/banking.BankingService/MakeTransaction"
 	BankingService_GetBalance_FullMethodName            = "/banking.BankingService/GetBalance"
 	BankingService_CreateAccount_FullMethodName         = "/banking.BankingService/CreateAccount"
@@ -30,6 +31,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type BankingServiceClient interface {
+	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
 	MakeTransaction(ctx context.Context, in *TransactionRequest, opts ...grpc.CallOption) (*TransactionResponse, error)
 	GetBalance(ctx context.Context, in *BalanceRequest, opts ...grpc.CallOption) (*BalanceResponse, error)
 	CreateAccount(ctx context.Context, in *AccountRequest, opts ...grpc.CallOption) (*AccountResponse, error)
@@ -43,6 +45,15 @@ type bankingServiceClient struct {
 
 func NewBankingServiceClient(cc grpc.ClientConnInterface) BankingServiceClient {
 	return &bankingServiceClient{cc}
+}
+
+func (c *bankingServiceClient) Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error) {
+	out := new(PingResponse)
+	err := c.cc.Invoke(ctx, BankingService_Ping_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *bankingServiceClient) MakeTransaction(ctx context.Context, in *TransactionRequest, opts ...grpc.CallOption) (*TransactionResponse, error) {
@@ -94,6 +105,7 @@ func (c *bankingServiceClient) GetTransactionDetails(ctx context.Context, in *Tr
 // All implementations must embed UnimplementedBankingServiceServer
 // for forward compatibility
 type BankingServiceServer interface {
+	Ping(context.Context, *PingRequest) (*PingResponse, error)
 	MakeTransaction(context.Context, *TransactionRequest) (*TransactionResponse, error)
 	GetBalance(context.Context, *BalanceRequest) (*BalanceResponse, error)
 	CreateAccount(context.Context, *AccountRequest) (*AccountResponse, error)
@@ -106,6 +118,9 @@ type BankingServiceServer interface {
 type UnimplementedBankingServiceServer struct {
 }
 
+func (UnimplementedBankingServiceServer) Ping(context.Context, *PingRequest) (*PingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")
+}
 func (UnimplementedBankingServiceServer) MakeTransaction(context.Context, *TransactionRequest) (*TransactionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MakeTransaction not implemented")
 }
@@ -132,6 +147,24 @@ type UnsafeBankingServiceServer interface {
 
 func RegisterBankingServiceServer(s grpc.ServiceRegistrar, srv BankingServiceServer) {
 	s.RegisterService(&BankingService_ServiceDesc, srv)
+}
+
+func _BankingService_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BankingServiceServer).Ping(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BankingService_Ping_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BankingServiceServer).Ping(ctx, req.(*PingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _BankingService_MakeTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -231,6 +264,10 @@ var BankingService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "banking.BankingService",
 	HandlerType: (*BankingServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Ping",
+			Handler:    _BankingService_Ping_Handler,
+		},
 		{
 			MethodName: "MakeTransaction",
 			Handler:    _BankingService_MakeTransaction_Handler,

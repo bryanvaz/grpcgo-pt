@@ -5,11 +5,20 @@ package banking;
 
 // Service definition
 service BankingService {
+  rpc Ping(PingRequest) returns (PingResponse);
   rpc MakeTransaction(TransactionRequest) returns (TransactionResponse);
   rpc GetBalance(BalanceRequest) returns (BalanceResponse);
   rpc CreateAccount(AccountRequest) returns (AccountResponse);
   rpc ListAccount(ListAccountRequest) returns (ListAccountResponse);
   rpc GetTransactionDetails(TransactionDetailsRequest) returns (TransactionDetailsResponse);
+}
+
+message PingRequest {
+  string message = 1;
+}
+
+message PingResponse {
+  string message = 1;
 }
 
 message Account {

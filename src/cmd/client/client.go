@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"os"
+	"strconv"
+	"time"
 
 	pb "github.com/bryanvaz/grpc-gl/protos/go/banking"
 	"google.golang.org/grpc"
@@ -33,9 +35,58 @@ func main() {
 		createAccount(client)
 	case "balance":
 		getBalance(client)
+	case "plow":
+		plow(client)
 	default:
 		log.Fatalf("Invalid command provided")
 	}
+}
+
+func plow(c pb.BankingServiceClient) {
+	numIter := 1
+	numConns := 1
+
+	if len(os.Args) > 2 {
+		for pos, value := range os.Args {
+			if value == "-n" && pos < len(os.Args)-1 {
+				numIter, _ = strconv.Atoi(os.Args[pos+1])
+			}
+		}
+		for pos, value := range os.Args {
+			if value == "-c" && pos < len(os.Args)-1 {
+				numConns, _ = strconv.Atoi(os.Args[pos+1])
+			}
+		}
+	}
+
+	pr := &pb.PingRequest{
+		Message: "ping",
+	}
+	latencies := make([]int64, numIter)
+	last_update := time.Now().UnixMicro()
+	if numConns > 1 {
+	}
+
+	for i := 0; i < numIter; i++ {
+		start := time.Now().UnixMicro()
+		_, err := c.Ping(context.Background(), pr)
+		if err != nil {
+			log.Fatalf("Failed to ping: %v", err)
+		}
+		end := time.Now().UnixMicro()
+		latencies[i] = end - start
+		if end-last_update > 500_000 || i == numIter-1 {
+			avg_latency := int64(0)
+			for li := 0; li <= i; li++ {
+				avg_latency += latencies[li]
+			}
+			avg_latency /= int64(i + 1)
+			log.Printf("Iteration %d/%d - Latency: %d μsec (avg)", i+1, numIter, avg_latency)
+			last_update = end
+		}
+	}
+	// log.Printf("Response from server: %v", pongResp)
+
 }
 
 func createAccount(c pb.BankingServiceClient) {

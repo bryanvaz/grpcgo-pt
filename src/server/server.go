@@ -65,6 +65,13 @@ func (s *Server) GracefulStop() {
 	}
 }
 
+func (s *Server) Ping(ctx context.Context, req *banking.PingRequest) (*banking.PingResponse, error) {
+	mtx.Lock()
+	defer mtx.Unlock()
+
+	return &banking.PingResponse{Message: "Pong"}, nil
+}
+
 func (s *Server) MakeTransaction(ctx context.Context, req *banking.TransactionRequest) (*banking.TransactionResponse, error) {
 	mtx.Lock()
 	defer mtx.Unlock()
